@@ -124,13 +124,24 @@ const App = () => {
     }
   };
 
-  // LƯU / XÓA GHI NHẬN TRÊN ĐÁM MÂY
+  // LƯU / XÓA GHI NHẬN TRÊN ĐÁM MÂY & GOOGLE SHEET
   const handleSaveRecord = async () => {
     if (role !== 'admin' || !selectedDateStr) return;
     const dateStr = selectedDateStr;
+    const googleSheetURL = "https://script.google.com/macros/s/AKfycbxoMWEiRAza1Br3JdKCxIhrcPQTxmNQp7TlWWKE5l7Jz6KysLpOV9-oCtwT3yR1wqCE/exec";
 
+    // NẾU XÓA TÊN KHÁCH HÀNG (ĐỒNG NGHĨA VỚI XÓA LỊCH SỬ NGÀY ĐÓ)
     if (!selectedCustomer || !selectedCustomer.trim()) {
+      // 1. Xóa trên Firebase
       await remove(ref(db, `records/${dateStr}`));
+
+      // 2. Bắn lệnh XÓA sang Google Sheet
+      fetch(googleSheetURL, {
+        method: "POST",
+        body: JSON.stringify({ action: "delete", date: dateStr }),
+        headers: { "Content-Type": "text/plain;charset=utf-8" }
+      }).catch(err => console.log("Lỗi xóa trên Sheet: ", err));
+
       setSelectedDateStr(null);
       setHarvestCount("");
       setSelectedCustomer("");
@@ -139,6 +150,7 @@ const App = () => {
       return;
     }
 
+    // NẾU THÊM MỚI HOẶC SỬA SỐ LIỆU
     const countNum = parseCoconutCount(harvestCount);
     if (countNum <= 0) {
       alert("⚠️ Vui lòng nhập số dừa hợp lệ (lớn hơn 0)!");
@@ -147,6 +159,7 @@ const App = () => {
 
     const priceNum = parseFloat(unitPrice) || 60000;
     const newData = { 
+      action: "save",
       date: dateStr, 
       name: selectedCustomer.trim(), 
       status: "recorded", 
@@ -155,21 +168,27 @@ const App = () => {
     };
 
     try {
-      // 1. Lưu vào Firebase
-      await set(ref(db, `records/${dateStr}`), newData);
+      // 1. Lưu trên Firebase
+      await set(ref(db, `records/${dateStr}`), {
+        date: newData.date,
+        name: newData.name,
+        status: newData.status,
+        count: newData.count,
+        price: newData.price
+      });
+      
       const targetCust = customers.find(c => c.name === selectedCustomer.trim());
       if (targetCust) {
         await set(ref(db, `customers/${targetCust.id}`), { ...targetCust, price: priceNum });
       }
-      // 2. BẮN DỮ LIỆU SANG GOOGLE SHEET (Đoạn mới thêm)
-      const googleSheetURL = "https://script.google.com/macros/s/AKfycbxoMWEiRAza1Br3JdKCxIhrcPQTxmNQp7TlWWKE5l7Jz6KysLpOV9-oCtwT3yR1wqCE/exec"; 
-      
+
+      // 2. Bắn dữ liệu CẬP NHẬT/THÊM MỚI sang Google Sheet
       fetch(googleSheetURL, {
         method: "POST",
         body: JSON.stringify(newData),
-        // Chú ý: Dùng text/plain để không bị Google chặn lỗi CORS
         headers: { "Content-Type": "text/plain;charset=utf-8" }
       }).catch(err => console.log("Lỗi đồng bộ Sheet: ", err));
+
     } catch (err) {
       alert("⚠️ Không thể kết nối tới máy chủ Google!");
     }
