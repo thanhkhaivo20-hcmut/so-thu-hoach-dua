@@ -28,19 +28,16 @@ const db = new sqlite3.Database(dbPath, (err) => {
   else console.log('Đã kết nối cơ sở dữ liệu SQLite thành công.');
 });
 
-// 2. TẠO CÁC BẢNG TRONG DATABASE
+// 2. TẠO CÁC BẢNG TRONG DATABASE (Số dừa cho phép lưu số thập phân REAL)
 db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS harvest_data (date TEXT PRIMARY KEY, name TEXT, status TEXT, count INTEGER)`);
+  db.run(`CREATE TABLE IF NOT EXISTS harvest_data (date TEXT PRIMARY KEY, name TEXT, status TEXT, count REAL)`);
   
   db.run(`CREATE TABLE IF NOT EXISTS customers (
     id INTEGER PRIMARY KEY AUTOINCREMENT, 
     name TEXT UNIQUE, 
-    standard_count INTEGER DEFAULT 120, 
     cycle_days INTEGER DEFAULT 25,
-    price REAL DEFAULT 8000
+    price REAL DEFAULT 60000
   )`);
-
-  db.run(`ALTER TABLE customers ADD COLUMN price REAL DEFAULT 8000`, () => {});
 });
 
 // 3. CÁC API TRẢ VỀ DỮ LIỆU
@@ -71,19 +68,18 @@ app.get('/api/customers', (req, res) => {
 });
 
 app.post('/api/customers', (req, res) => {
-  const { name, standard_count, cycle_days, price } = req.body;
-  db.run(`INSERT INTO customers (name, standard_count, cycle_days, price) VALUES (?, ?, ?, ?)`, 
-    [name, standard_count || 120, cycle_days || 25, price || 8000], function(err) {
+  const { name, cycle_days, price } = req.body;
+  db.run(`INSERT INTO customers (name, cycle_days, price) VALUES (?, ?, ?)`, 
+    [name, cycle_days || 25, price || 60000], function(err) {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ id: this.lastID, name, standard_count, cycle_days, price: price || 8000 });
+      res.json({ id: this.lastID, name, cycle_days, price: price || 60000 });
   });
 });
 
-// API Chỉnh sửa khách hàng
 app.put('/api/customers/:id', (req, res) => {
-  const { name, standard_count, cycle_days, price } = req.body;
-  db.run(`UPDATE customers SET name = ?, standard_count = ?, cycle_days = ?, price = ? WHERE id = ?`,
-    [name, standard_count, cycle_days, price, req.params.id], function(err) {
+  const { name, cycle_days, price } = req.body;
+  db.run(`UPDATE customers SET name = ?, cycle_days = ?, price = ? WHERE id = ?`,
+    [name, cycle_days, price, req.params.id], function(err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ message: 'Cập nhật thành công!' });
   });
