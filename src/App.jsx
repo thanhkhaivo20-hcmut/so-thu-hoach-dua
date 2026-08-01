@@ -123,21 +123,35 @@ function convertSolar2Lunar(dd, mm, yyyy, timeZone = 7) {
 // GIAO DIỆN CHÍNH (APP COMPONENTS)
 // ==========================================
 const App = () => {
-  const [role, setRole] = useState(null);
+  // KHỞI TẠO STATE TỪ LOCALSTORAGE ĐỂ KHÔNG BỊ MẤT DỮ LIỆU KHI REFRESH
+  const [role, setRole] = useState(() => localStorage.getItem('coconut_role') || null);
   const [pinCode, setPinCode] = useState('');
   const [activeTab, setActiveTab] = useState('calendar');
+  const [viewMode, setViewMode] = useState('grid'); 
 
   const [currentMonth, setCurrentMonth] = useState(new Date()); 
-  const [records, setRecords] = useState({});
-  const [yearRecords, setYearRecords] = useState({}); 
-  const [selectedDateStr, setSelectedDateStr] = useState(null);
   
+  const [records, setRecords] = useState(() => {
+    const saved = localStorage.getItem('coconut_records');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const [customers, setCustomers] = useState(() => {
+    const saved = localStorage.getItem('coconut_customers');
+    return saved ? JSON.parse(saved) : [
+      { id: 1, name: "Nguyễn Văn A", price: 60000, cycle_days: 25 },
+      { id: 2, name: "Huỳnh Thị Kim Liên", price: 60000, cycle_days: 25 },
+      { id: 3, name: "Võ Thanh Khải", price: 60000, cycle_days: 25 },
+      { id: 4, name: "Võ An Nhiên", price: 60000, cycle_days: 25 }
+    ];
+  });
+
+  const [selectedDateStr, setSelectedDateStr] = useState(null);
   const [harvestCount, setHarvestCount] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [unitPrice, setUnitPrice] = useState(""); 
-  const [customers, setCustomers] = useState([]);
   
   const [newCustomer, setNewCustomer] = useState({ name: "", cycle_days: 25, price: 60000 });
   const [editingCustomer, setEditingCustomer] = useState(null);
@@ -150,56 +164,52 @@ const App = () => {
   const emptyCells = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
   const currentMonthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
 
-  const fetchCustomers = () => {
-    fetch('/api/customers')
-      .then(res => res.json())
-      .then(data => setCustomers(data))
-      .catch(err => console.error("Lỗi lấy dữ liệu:", err));
-  };
+  // TỰ ĐỘNG LƯU DỮ LIỆU VÀO LOCALSTORAGE KHI CÓ THAY ĐỔI
+  useEffect(() => {
+    localStorage.setItem('coconut_records', JSON.stringify(records));
+  }, [records]);
 
-  // Lấy bản ghi của tháng hiện tại
+  useEffect(() => {
+    localStorage.setItem('coconut_customers', JSON.stringify(customers));
+  }, [customers]);
+
   useEffect(() => {
     if (role) {
-      fetch(`/api/records?month=${currentMonthStr}`)
-        .then(res => res.json())
-        .then(data => setRecords(data))
-        .catch(err => console.error("Lỗi lấy lịch sử:", err));
-      
+      localStorage.setItem('coconut_role', role);
+    } else {
+      localStorage.removeItem('coconut_role');
+    }
+  }, [role]);
+
+  // ĐỒNG BỘ VỚI SERVER NẾU CÓ CỔNG API
+  const fetchCustomers = () => {
+    fetch('/api/customers')
+      .then(res => { if (!res.ok) throw new Error(); return res.json(); })
+      .then(data => { if (Array.isArray(data) && data.length > 0) setCustomers(data); })
+      .catch(() => {});
+  };
+
+  const fetchAllRecords = () => {
+    fetch('/api/records')
+      .then(res => { if (!res.ok) throw new Error(); return res.json(); })
+      .then(data => {
+        let recObj = {};
+        if (Array.isArray(data) && data.length > 0) {
+          data.forEach(item => { if (item.date) recObj[item.date] = item; });
+          setRecords(recObj);
+        } else if (data && typeof data === 'object' && Object.keys(data).length > 0) {
+          setRecords(data);
+        }
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (role) {
+      fetchAllRecords();
       fetchCustomers();
     }
-  }, [role, currentMonthStr]);
-
-  // Lấy toàn bộ dữ liệu cả năm khi xem Báo cáo
-  useEffect(() => {
-    if (role && activeTab === 'report') {
-      fetch(`/api/records?year=${year}`)
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data)) {
-            const recObj = {};
-            data.forEach(item => { if (item.date) recObj[item.date] = item; });
-            setYearRecords(recObj);
-          } else if (data && typeof data === 'object') {
-            setYearRecords(data);
-          }
-        })
-        .catch(() => {
-          // Thử lấy toàn bộ không lọc nếu backend không có ?year=
-          fetch('/api/records')
-            .then(res => res.json())
-            .then(data => {
-              if (Array.isArray(data)) {
-                const recObj = {};
-                data.forEach(item => { if (item.date) recObj[item.date] = item; });
-                setYearRecords(recObj);
-              } else if (data && typeof data === 'object') {
-                setYearRecords(data);
-              }
-            })
-            .catch(() => setYearRecords(records));
-        });
-    }
-  }, [role, activeTab, year, records]);
+  }, [role]);
 
   const handlePrevMonth = () => setCurrentMonth(new Date(year, month - 1, 1));
   const handleNextMonth = () => setCurrentMonth(new Date(year, month + 1, 1));
@@ -209,14 +219,20 @@ const App = () => {
   };
 
   const handleLogin = () => {
-    if (pinCode === '1234') { setRole('admin'); } 
-    else if (pinCode === '0000') { setRole('viewer'); setActiveTab('calendar'); } 
-    else { alert("Mã PIN không đúng. Vui lòng thử lại!"); }
+    if (pinCode === '1234') { 
+      setRole('admin'); 
+    } else if (pinCode === '0000') { 
+      setRole('viewer'); 
+      setActiveTab('calendar'); 
+    } else { 
+      alert("Mã PIN không đúng. Vui lòng thử lại!"); 
+    }
     setPinCode('');
   };
 
   const handleLogout = () => {
     setRole(null);
+    localStorage.removeItem('coconut_role');
     setActiveTab('calendar');
   };
 
@@ -232,9 +248,9 @@ const App = () => {
     setIsDropdownOpen(false);
     const rec = records[dateStr];
     if (rec && rec.status === 'recorded') {
-      setHarvestCount(rec.count);
-      setSelectedCustomer(rec.name);
-      setCustomerSearch(rec.name);
+      setHarvestCount(rec.count ? rec.count.toString() : "");
+      setSelectedCustomer(rec.name || "");
+      setCustomerSearch(rec.name || "");
       setUnitPrice(rec.price || (customers.find(c => c.name === rec.name)?.price) || 60000);
     } else {
       setHarvestCount("");
@@ -244,95 +260,109 @@ const App = () => {
     }
   };
 
-  const handleSaveRecord = () => {
-    if (role !== 'admin') return;
-    if (!selectedCustomer) return alert("⚠️ Vui lòng chọn Tên Khách Hàng!");
-    
-    const countNum = parseCoconutCount(harvestCount);
-    if (countNum <= 0) return alert("⚠️ Vui lòng nhập số dừa hợp lệ!");
+  const handleSaveRecord = async () => {
+    if (role !== 'admin' || !selectedDateStr) return;
 
-    const priceNum = parseFloat(unitPrice) || 60000;
+    const dateStr = selectedDateStr;
 
-    const newData = { 
-      date: selectedDateStr, 
-      name: selectedCustomer, 
-      status: "recorded", 
-      count: countNum,
-      price: priceNum 
-    };
-
-    fetch('/api/records', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newData)
-    })
-    .then(() => {
-      setRecords(prev => ({ ...prev, [selectedDateStr]: { ...newData } }));
-      setYearRecords(prev => ({ ...prev, [selectedDateStr]: { ...newData } }));
-      
-      const targetCust = customers.find(c => c.name === selectedCustomer);
-      if (targetCust) {
-        const updatedCust = { ...targetCust, price: priceNum };
-        fetch(`/api/customers/${targetCust.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatedCust)
-        }).then(() => {
-          setCustomers(prev => prev.map(c => c.name === selectedCustomer ? updatedCust : c));
-        }).catch(() => {
-          setCustomers(prev => prev.map(c => c.name === selectedCustomer ? { ...c, price: priceNum } : c));
-        });
-      }
+    // XÓA GHI NHẬN NẾU TÊN KHÁCH HÀNG TRỐNG
+    if (!selectedCustomer || !selectedCustomer.trim()) {
+      setRecords(prev => {
+        const updated = { ...prev };
+        delete updated[dateStr];
+        return updated;
+      });
 
       setSelectedDateStr(null);
       setHarvestCount("");
       setSelectedCustomer("");
       setCustomerSearch("");
       setUnitPrice("");
-    });
+
+      try {
+        await fetch(`/api/records/${dateStr}`, { method: 'DELETE' });
+      } catch (err) {}
+      return;
+    }
+
+    const countNum = parseCoconutCount(harvestCount);
+    if (countNum <= 0) {
+      alert("⚠️ Vui lòng nhập số dừa hợp lệ (lớn hơn 0)!");
+      return;
+    }
+
+    const priceNum = parseFloat(unitPrice) || 60000;
+    const newData = { 
+      date: dateStr, 
+      name: selectedCustomer.trim(), 
+      status: "recorded", 
+      count: countNum,
+      price: priceNum 
+    };
+
+    setRecords(prev => ({
+      ...prev,
+      [dateStr]: newData
+    }));
+
+    const targetCust = customers.find(c => c.name === selectedCustomer.trim());
+    if (targetCust) {
+      setCustomers(prev => prev.map(c => c.name === targetCust.name ? { ...c, price: priceNum } : c));
+    }
+
+    setSelectedDateStr(null);
+    setHarvestCount("");
+    setSelectedCustomer("");
+    setCustomerSearch("");
+    setUnitPrice("");
+
+    try {
+      await fetch('/api/records', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newData)
+      });
+    } catch (err) {}
   };
 
   const handleAddCustomer = () => {
     if (role !== 'admin') return;
     if (!newCustomer.name) return alert("Vui lòng nhập tên khách hàng!");
     
+    const createdCustomer = { ...newCustomer, id: Date.now() };
+    setCustomers(prev => [...prev, createdCustomer]);
+    setNewCustomer({ name: "", cycle_days: 25, price: 60000 });
+
     fetch('/api/customers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newCustomer)
-    })
-    .then(res => res.json())
-    .then(data => {
-      setCustomers([...customers, data]);
-      setNewCustomer({ name: "", cycle_days: 25, price: 60000 });
-    });
+      body: JSON.stringify(createdCustomer)
+    }).catch(() => {});
   };
 
   const handleUpdateCustomer = () => {
     if (role !== 'admin' || !editingCustomer) return;
     if (!editingCustomer.name) return alert("Vui lòng nhập tên khách hàng!");
 
+    setCustomers(prev => prev.map(c => c.id === editingCustomer.id ? editingCustomer : c));
+
     fetch(`/api/customers/${editingCustomer.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(editingCustomer)
-    })
-    .then(res => res.json())
-    .then(() => {
-      fetchCustomers();
-      setEditingCustomer(null);
-    });
+    }).catch(() => {});
+
+    setEditingCustomer(null);
   };
 
   const handleDeleteCustomer = (id, name) => {
     if (role !== 'admin') return;
     if (window.confirm(`Bạn có chắc chắn muốn xóa khách hàng "${name}"?`)) {
-      fetch(`/api/customers/${id}`, { method: 'DELETE' })
-        .then(() => fetchCustomers());
+      setCustomers(prev => prev.filter(c => c.id !== id));
+      fetch(`/api/customers/${id}`, { method: 'DELETE' }).catch(() => {});
     }
   };
 
-  // Tính toán báo cáo cho Tháng đang chọn
   const calculateReport = () => {
     let totalCoconuts = 0;
     let totalMoney = 0;
@@ -373,7 +403,6 @@ const App = () => {
     return { totalCoconuts, totalMoney, harvestList };
   };
 
-  // Tính toán dữ liệu phân tích 12 tháng trong NĂM
   const calculateYearlyAnalysis = () => {
     const monthlyStats = Array.from({ length: 12 }, (_, i) => ({
       monthNum: i + 1,
@@ -381,13 +410,11 @@ const App = () => {
       money: 0
     }));
 
-    const allSource = { ...records, ...yearRecords };
-
-    Object.keys(allSource).forEach(dateStr => {
+    Object.keys(records).forEach(dateStr => {
       if (dateStr.startsWith(`${year}-`)) {
         const parts = dateStr.split('-');
         const mIndex = parseInt(parts[1], 10) - 1;
-        const rec = allSource[dateStr];
+        const rec = records[dateStr];
         if (rec && rec.status === 'recorded' && mIndex >= 0 && mIndex < 12) {
           const count = parseFloat(rec.count) || 0;
           const price = parseFloat(rec.price) || (customers.find(c => c.name === rec.name)?.price) || 60000;
@@ -414,7 +441,6 @@ const App = () => {
     return { monthlyStats, maxCoconuts, maxMoney, yearlyTotalCoconuts, yearlyTotalMoney, bestMonth, bestMoney };
   };
 
-  // Định dạng hiển thị gọn trên đỉnh cột
   const formatShortMoney = (val) => {
     if (!val || val === 0) return '';
     if (val >= 1000000) return (val / 1000000).toFixed(1).replace('.0', '') + 'tr';
@@ -429,6 +455,8 @@ const App = () => {
 
   const { totalCoconuts, totalMoney, harvestList } = calculateReport();
   const { monthlyStats, maxCoconuts, maxMoney, yearlyTotalCoconuts, yearlyTotalMoney, bestMonth, bestMoney } = calculateYearlyAnalysis();
+
+  const dayOfWeekNames = ['CN', 'T.2', 'T.3', 'T.4', 'T.5', 'T.6', 'T.7'];
 
   if (!role) {
     return (
@@ -446,7 +474,6 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-3 md:p-6 font-sans relative">
-      {/* THANH ĐIỀU HƯỚNG TRÊN CÙNG */}
       <div className="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-md shadow-sm mb-6 gap-4">
         <div className="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-6 items-center md:items-baseline w-full md:w-auto">
           <h1 className="text-lg md:text-xl font-bold text-gray-800">Quản lý thu hoạch dừa</h1>
@@ -465,56 +492,131 @@ const App = () => {
       {/* TAB 1: LỊCH THU HOẠCH */}
       {activeTab === 'calendar' && (
         <>
-          <div className="flex justify-between items-center mb-4 md:mb-6">
-            <button onClick={handlePrevMonth} className="px-2 md:px-4 py-1 md:py-2 text-sm md:text-base border rounded bg-white shadow-sm hover:bg-gray-50">‹ Trước</button>
-            <h2 className="text-lg md:text-2xl font-bold text-gray-800">Tháng {month + 1} / {year}</h2>
-            <button onClick={handleNextMonth} className="px-2 md:px-4 py-1 md:py-2 text-sm md:text-base border rounded bg-white shadow-sm hover:bg-gray-50">Sau ›</button>
-          </div>
-          
-          <div className="grid grid-cols-7 gap-1 md:gap-4">
-            {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(day => (
-              <div key={day} className="text-center font-medium text-gray-500 text-xs md:text-base mb-1 md:mb-2">{day}</div>
-            ))}
+          <div className="flex justify-between items-center mb-4 md:mb-6 flex-wrap gap-2">
+            <button onClick={handlePrevMonth} className="px-2 md:px-4 py-1.5 md:py-2 text-sm md:text-base border rounded bg-white shadow-sm hover:bg-gray-50">‹ Trước</button>
             
-            {Array.from({ length: emptyCells }).map((_, i) => <div key={`empty-${i}`} className="bg-transparent"></div>)}
+            <div className="flex items-center space-x-2 md:space-x-4">
+              <button 
+                onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 text-xs md:text-sm font-semibold transition shadow-sm"
+              >
+                {viewMode === 'grid' ? '☰ Dạng hàng' : '📅 Dạng ô'}
+              </button>
 
-            {Array.from({ length: daysInCurrentMonth }, (_, i) => i + 1).map(day => {
-              const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-              const record = records[dateStr] || { name: "Chưa ghi", status: "pending" };
-              const isRecorded = record.status === "recorded";
-              const today = new Date();
-              const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+              <h2 className="text-lg md:text-2xl font-bold text-gray-800">Tháng {month + 1} / {year}</h2>
+            </div>
 
-              const lunar = convertSolar2Lunar(day, month + 1, year);
-
-              return (
-                <div 
-                  key={day} 
-                  onClick={() => handleOpenModal(dateStr)}
-                  className={`bg-white border rounded p-1 md:p-3 min-h-[65px] md:min-h-[105px] shadow-sm flex flex-col justify-between transition-all
-                    ${role === 'admin' ? 'cursor-pointer hover:border-blue-400' : 'cursor-default opacity-90'}
-                    ${isToday ? 'ring-2 ring-blue-500' : ''}`}
-                >
-                  <div className="flex justify-between items-baseline">
-                    <span className={`text-xs md:text-base font-medium ${isToday ? 'text-blue-600 font-bold' : 'text-gray-800'}`}>{day}</span>
-                    <span className="text-[10px] md:text-xs font-semibold text-red-600">
-                      {lunar.day}/{lunar.month} <span className="hidden md:inline font-normal">ÂL</span>
-                    </span>
-                  </div>
-
-                  <div className="mt-1">
-                    <div className={`text-[10px] md:text-xs p-1 rounded mb-1 truncate ${isRecorded ? 'bg-green-100 text-green-700 font-medium' : 'bg-gray-100 text-gray-500 hidden md:block'}`}>
-                      <span className="md:hidden">{isRecorded ? record.name.charAt(0) : '-'}</span>
-                      <span className="hidden md:inline">{record.name}</span>
-                    </div>
-                    {isRecorded && <div className="text-[10px] md:text-sm font-bold text-gray-800">{record.count} <span className="hidden md:inline">dừa</span></div>}
-                  </div>
-                </div>
-              );
-            })}
+            <button onClick={handleNextMonth} className="px-2 md:px-4 py-1.5 md:py-2 text-sm md:text-base border rounded bg-white shadow-sm hover:bg-gray-50">Sau ›</button>
           </div>
           
-          {/* MODAL GHI NHẬN LỊCH */}
+          {/* DẠNG Ô VUÔNG (GRID) */}
+          {viewMode === 'grid' && (
+            <div className="grid grid-cols-7 gap-1 md:gap-4">
+              {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map(day => (
+                <div key={day} className="text-center font-medium text-gray-500 text-xs md:text-base mb-1 md:mb-2">{day}</div>
+              ))}
+              
+              {Array.from({ length: emptyCells }).map((_, i) => <div key={`empty-${i}`} className="bg-transparent"></div>)}
+
+              {Array.from({ length: daysInCurrentMonth }, (_, i) => i + 1).map(day => {
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const record = records[dateStr] || { name: "Chưa ghi", status: "pending" };
+                const isRecorded = record.status === "recorded";
+                const today = new Date();
+                const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                const lunar = convertSolar2Lunar(day, month + 1, year);
+
+                return (
+                  <div 
+                    key={day} 
+                    onClick={() => handleOpenModal(dateStr)}
+                    className={`bg-white border rounded p-1 md:p-3 min-h-[65px] md:min-h-[105px] shadow-sm flex flex-col justify-between transition-all
+                      ${role === 'admin' ? 'cursor-pointer hover:border-blue-400' : 'cursor-default opacity-90'}
+                      ${isToday ? 'ring-2 ring-blue-500' : ''}`}
+                  >
+                    <div className="flex justify-between items-baseline">
+                      <span className={`text-xs md:text-base font-medium ${isToday ? 'text-blue-600 font-bold' : 'text-gray-800'}`}>{day}</span>
+                      <span className="text-[10px] md:text-xs font-semibold text-red-600">
+                        {lunar.day}/{lunar.month} <span className="hidden md:inline font-normal">ÂL</span>
+                      </span>
+                    </div>
+
+                    <div className="mt-1">
+                      <div className={`text-[10px] md:text-xs p-1 rounded mb-1 truncate ${isRecorded ? 'bg-green-100 text-green-700 font-medium' : 'bg-gray-100 text-gray-500 hidden md:block'}`}>
+                        <span className="md:hidden">{isRecorded ? record.name.charAt(0) : '-'}</span>
+                        <span className="hidden md:inline">{isRecorded ? record.name : "Chưa ghi"}</span>
+                      </div>
+                      {isRecorded && <div className="text-[10px] md:text-sm font-bold text-gray-800">{record.count} <span className="hidden md:inline">dừa</span></div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* DẠNG HÀNG NGANG (LIST) */}
+          {viewMode === 'list' && (
+            <div className="space-y-2.5 max-w-2xl mx-auto">
+              {Array.from({ length: daysInCurrentMonth }, (_, i) => i + 1).map(day => {
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const record = records[dateStr] || { name: "Chưa ghi", status: "pending" };
+                const isRecorded = record.status === "recorded";
+                
+                const today = new Date();
+                const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                
+                const dateObj = new Date(year, month, day);
+                const dayOfWeekStr = dayOfWeekNames[dateObj.getDay()];
+                const lunar = convertSolar2Lunar(day, month + 1, year);
+
+                return (
+                  <div 
+                    key={day}
+                    onClick={() => handleOpenModal(dateStr)}
+                    className={`flex items-center gap-3 md:gap-4 bg-white p-3 md:p-3.5 rounded-xl border shadow-sm transition-all ${
+                      role === 'admin' ? 'cursor-pointer hover:border-blue-400 hover:shadow-md' : ''
+                    } ${isToday ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-200'}`}
+                  >
+                    <div className="flex flex-col items-center justify-center min-w-[55px] text-center border-r border-gray-100 pr-2">
+                      <span className={`text-[11px] font-bold ${isToday ? 'text-blue-600' : 'text-gray-500'}`}>{dayOfWeekStr}</span>
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-base font-extrabold my-0.5 ${
+                        isToday ? 'bg-blue-600 text-white shadow-md' : 'text-gray-800 bg-gray-100'
+                      }`}>
+                        {day}
+                      </div>
+                      <span className="text-[10px] font-semibold text-red-600">{lunar.day}/{lunar.month} ÂL</span>
+                    </div>
+
+                    <div className="flex-1">
+                      {isRecorded ? (
+                        <div className="bg-emerald-500 text-white p-2.5 md:p-3 rounded-lg shadow-sm flex items-center justify-between gap-2">
+                          <div>
+                            <div className="font-bold text-sm md:text-base leading-tight">{record.name}</div>
+                            <div className="text-[11px] text-emerald-100 mt-0.5">
+                              Đơn giá: {Number(record.price || 60000).toLocaleString('vi-VN')} đ/dừa
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-base md:text-lg font-black">{record.count} dừa</div>
+                            <div className="text-[11px] bg-white/20 px-2 py-0.5 rounded font-semibold inline-block mt-0.5">
+                              {(record.count * (record.price || 60000)).toLocaleString('vi-VN')} đ
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-gray-50 border border-dashed border-gray-200 rounded-lg p-2.5 text-gray-400 text-xs flex justify-between items-center hover:bg-gray-100">
+                          <span>Chưa có ghi nhận</span>
+                          {role === 'admin' && <span className="text-blue-600 font-semibold text-[11px]">+ Thêm</span>}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          
+          {/* MODAL GHI NHẬN */}
           {selectedDateStr && role === 'admin' && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-sm">
@@ -530,7 +632,7 @@ const App = () => {
                     <input 
                       type="text" 
                       className="w-full border-2 border-blue-500 rounded p-2 pr-10 font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer" 
-                      placeholder="-- Bấm vào đây để chọn khách hàng --" 
+                      placeholder="-- Chọn hoặc nhập tên KH --" 
                       value={customerSearch} 
                       onClick={() => setIsDropdownOpen(true)}
                       onChange={(e) => {
@@ -549,7 +651,7 @@ const App = () => {
                             setSelectedCustomer('');
                             setIsDropdownOpen(true);
                           }}
-                          className="hover:text-gray-800 font-bold px-1 text-xs"
+                          className="hover:text-red-600 font-bold px-1 text-sm"
                         >
                           ✕
                         </button>
@@ -568,7 +670,7 @@ const App = () => {
                           className="p-2.5 hover:bg-gray-100 cursor-pointer text-sm italic text-gray-500 border-b border-gray-100"
                           onClick={() => { setSelectedCustomer(""); setCustomerSearch(""); setIsDropdownOpen(false); }}
                         >
-                          -- Bấm vào đây để chọn khách hàng --
+                          -- Bỏ chọn (Chuyển về Chưa ghi) --
                         </div>
                         {customers.filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase())).length > 0 ? (
                           customers
@@ -599,7 +701,6 @@ const App = () => {
                 <div className="mb-3">
                   <label className="block text-sm font-medium mb-1 text-gray-700">Đơn giá (VNĐ / dừa):</label>
                   <input type="number" className="w-full border rounded p-2 font-bold text-red-600" placeholder="VD: 70000" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
-                  <p className="text-[11px] text-gray-500 mt-1">* Khi lưu, đơn giá này sẽ tự động cập nhật cho khách hàng này.</p>
                 </div>
 
                 <div className="mb-5">
@@ -648,8 +749,8 @@ const App = () => {
                     <td className="p-2 md:p-3">{c.cycle_days} ngày</td>
                     <td className="p-2 md:p-3 text-center">
                       <div className="flex items-center justify-center gap-2">
-                        <button onClick={() => setEditingCustomer(c)} className="text-blue-600 hover:bg-blue-50 border border-blue-200 px-2 py-1 rounded text-xs flex items-center gap-1">✏️ Sửa</button>
-                        <button onClick={() => handleDeleteCustomer(c.id, c.name)} className="text-red-600 hover:bg-red-50 border border-red-200 px-2 py-1 rounded text-xs flex items-center gap-1">🗑️ Xóa</button>
+                        <button onClick={() => setEditingCustomer(c)} className="text-blue-600 hover:bg-blue-50 border border-blue-200 px-2 py-1 rounded text-xs">✏️ Sửa</button>
+                        <button onClick={() => handleDeleteCustomer(c.id, c.name)} className="text-red-600 hover:bg-red-50 border border-red-200 px-2 py-1 rounded text-xs">🗑️ Xóa</button>
                       </div>
                     </td>
                   </tr>
@@ -686,15 +787,13 @@ const App = () => {
         </div>
       )}
 
-      {/* TAB 3: BÁO CÁO & PHÂN TÍCH THU HOẠCH */}
+      {/* TAB 3: BÁO CÁO */}
       {activeTab === 'report' && (
         <div className="space-y-6">
-          {/* PHẦN 1: BÁO CÁO CHI TIẾT THÁNG (CÓ BỘ CHỌN THÁNG/NĂM) */}
           <div className="bg-white p-4 md:p-6 rounded-md shadow-sm">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-4 mb-6 gap-3">
               <h2 className="text-lg md:text-xl font-bold text-gray-800">Báo cáo Tháng {month + 1}/{year}</h2>
               
-              {/* Bộ chọn Tháng/Năm linh hoạt */}
               <div className="flex items-center gap-2 bg-gray-50 p-1.5 rounded-lg border border-gray-200">
                 <span className="text-xs font-semibold text-gray-600 pl-2">📅 Xem thời gian:</span>
                 <select 
@@ -770,23 +869,15 @@ const App = () => {
             </div>
           </div>
 
-          {/* PHẦN 2: MỤC PHÂN TÍCH & BIỂU ĐỒ 12 THÁNG TRONG NĂM (ĐÃ NÂNG CẤP) */}
           <div className="bg-white p-4 md:p-6 rounded-md shadow-sm border border-blue-100">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 mb-6">
               <div>
                 <h3 className="text-lg md:text-xl font-bold text-gray-800 flex items-center gap-2">
-                  <span>📊</span> Biểu Đồ Phân Tích Cả Năm {year} (Tháng 1 - Tháng 12)
+                  <span>📊</span> Biểu Đồ Phân Tích Cả Năm {year}
                 </h3>
-                <p className="text-xs text-gray-500 mt-1">Hiển thị song song Sản lượng (dừa) và Doanh thu (VNĐ) của từng tháng</p>
-              </div>
-
-              <div className="flex items-center gap-4 mt-3 md:mt-0 text-xs font-semibold">
-                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 bg-blue-500 rounded-sm inline-block"></span> Cột 1: Sản lượng (Dừa)</span>
-                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 bg-emerald-500 rounded-sm inline-block"></span> Cột 2: Doanh thu (VNĐ)</span>
               </div>
             </div>
 
-            {/* THỐNG KÊ TỔNG QUAN NĂM */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6 text-sm">
               <div className="bg-slate-50 p-3 rounded border">
                 <div className="text-gray-500 text-xs">Tổng dừa cả năm {year}</div>
@@ -804,15 +895,9 @@ const App = () => {
               </div>
             </div>
 
-            {/* BIỂU ĐỒ HÌNH CỘT 12 THÁNG DÀN ĐỀU VỚI CON SỐ HIỂN THỊ TRÊN ĐỈNH CỘT */}
-            <div className="overflow-x-auto pt-4 pb-2">
-              <div className="min-w-[850px] bg-slate-50/50 p-4 rounded-xl border border-gray-100">
-                <div className="h-64 flex items-end justify-between gap-2 pt-10 pb-6 border-b border-gray-300 relative">
-                  
-                  {/* Các đường kẻ ngang hỗ trợ mắt */}
-                  <div className="absolute inset-x-0 top-10 border-b border-gray-200 border-dashed text-[10px] text-gray-400 pl-1">Mức cao nhất (100%)</div>
-                  <div className="absolute inset-x-0 top-1/2 border-b border-gray-200 border-dashed text-[10px] text-gray-400 pl-1">50%</div>
-
+            <div className="overflow-x-auto pt-6 pb-2">
+              <div className="min-w-[800px] bg-slate-50/60 p-4 rounded-xl border border-gray-100">
+                <div className="h-64 flex items-end justify-between gap-2 pt-12 pb-6 border-b border-gray-300 relative">
                   {monthlyStats.map((stat) => {
                     const coconutHeightPercent = Math.round((stat.coconuts / maxCoconuts) * 100);
                     const moneyHeightPercent = Math.round((stat.money / maxMoney) * 100);
@@ -824,45 +909,32 @@ const App = () => {
                         onClick={() => handleSelectMonthYear(stat.monthNum, year)}
                         className={`flex-1 flex flex-col items-center h-full justify-end group cursor-pointer px-1 rounded transition-all relative ${isSelectedMonth ? 'bg-blue-100/50 ring-2 ring-blue-400' : 'hover:bg-gray-100'}`}
                       >
-                        {/* TOOLTIP NỔI KHI MÁY TÍNH/ĐIỆN THOẠI RÊ CHUỘT VÀO */}
-                        <div className="opacity-0 group-hover:opacity-100 transition-all duration-200 absolute -top-16 bg-gray-900 text-white text-[11px] p-2 rounded-lg shadow-xl z-30 pointer-events-none whitespace-nowrap left-1/2 -translate-x-1/2 border border-gray-700">
-                          <div className="font-bold border-b border-gray-700 pb-1 mb-1 text-center text-amber-300">Tháng {stat.monthNum}/{year}</div>
-                          <div>🥥 Sản lượng: <span className="font-bold text-blue-300">{stat.coconuts.toLocaleString('vi-VN')} dừa</span></div>
-                          <div>💰 Doanh thu: <span className="font-bold text-emerald-300">{stat.money.toLocaleString('vi-VN')} VNĐ</span></div>
-                        </div>
-
-                        {/* 2 CỘT SONG SONG (SẢN LƯỢNG & DOANH THU) */}
-                        <div className="w-full flex items-end justify-center gap-1.5 h-full relative">
-                          
-                          {/* Cột 1: Sản lượng (Xanh Dương) */}
-                          <div className="flex flex-col items-center flex-1 max-w-[20px] h-full justify-end">
+                        <div className="w-full flex items-end justify-center gap-1 h-full relative">
+                          <div className="flex flex-col items-center flex-1 max-w-[22px] h-full justify-end">
                             {stat.coconuts > 0 && (
-                              <span className="text-[10px] font-bold text-blue-700 mb-0.5 whitespace-nowrap">
+                              <span className="text-[9px] font-extrabold text-blue-700 mb-0.5 whitespace-nowrap">
                                 {formatShortCount(stat.coconuts)}
                               </span>
                             )}
                             <div 
-                              style={{ height: `${stat.coconuts > 0 ? Math.max(coconutHeightPercent, 6) : 2}%` }} 
-                              className={`w-full rounded-t-sm transition-all duration-300 ${stat.coconuts > 0 ? 'bg-blue-500 group-hover:bg-blue-600 shadow-sm' : 'bg-gray-200'}`}
+                              style={{ height: `${stat.coconuts > 0 ? Math.max(coconutHeightPercent, 8) : 2}%` }} 
+                              className={`w-full rounded-t-sm transition-all ${stat.coconuts > 0 ? 'bg-blue-500 group-hover:bg-blue-600' : 'bg-gray-200'}`}
                             ></div>
                           </div>
 
-                          {/* Cột 2: Doanh thu (Xanh Lá) */}
-                          <div className="flex flex-col items-center flex-1 max-w-[20px] h-full justify-end">
+                          <div className="flex flex-col items-center flex-1 max-w-[22px] h-full justify-end">
                             {stat.money > 0 && (
-                              <span className="text-[10px] font-bold text-emerald-700 mb-0.5 whitespace-nowrap">
+                              <span className="text-[9px] font-extrabold text-emerald-700 mb-0.5 whitespace-nowrap">
                                 {formatShortMoney(stat.money)}
                               </span>
                             )}
                             <div 
-                              style={{ height: `${stat.money > 0 ? Math.max(moneyHeightPercent, 6) : 2}%` }} 
-                              className={`w-full rounded-t-sm transition-all duration-300 ${stat.money > 0 ? 'bg-emerald-500 group-hover:bg-emerald-600 shadow-sm' : 'bg-gray-200'}`}
+                              style={{ height: `${stat.money > 0 ? Math.max(moneyHeightPercent, 8) : 2}%` }} 
+                              className={`w-full rounded-t-sm transition-all ${stat.money > 0 ? 'bg-emerald-500 group-hover:bg-emerald-600' : 'bg-gray-200'}`}
                             ></div>
                           </div>
-
                         </div>
 
-                        {/* NHÃN THÁNG RÕ RÀNG Ở ĐÁY */}
                         <div className={`text-xs font-bold mt-3 py-0.5 px-1.5 rounded ${isSelectedMonth ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>
                           T{stat.monthNum}
                         </div>
@@ -870,40 +942,6 @@ const App = () => {
                     );
                   })}
                 </div>
-              </div>
-            </div>
-
-            {/* BẢNG THỐNG KÊ CHI TIẾT 12 THÁNG DƯỚI BIỂU ĐỒ */}
-            <div className="mt-6 border-t pt-4">
-              <h4 className="text-sm font-bold text-gray-700 mb-3">📋 Bảng Tổng Hợp Sản Lượng & Doanh Thu 12 Tháng Năm {year}</h4>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-gray-100 text-gray-600 border-b">
-                      <th className="p-2 text-center">Tháng</th>
-                      <th className="p-2">Tổng Sản Lượng (Dừa)</th>
-                      <th className="p-2">Tổng Doanh Thu (VNĐ)</th>
-                      <th className="p-2 text-center">Thao Tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {monthlyStats.map((s) => (
-                      <tr key={s.monthNum} className={`border-b hover:bg-gray-50 ${s.monthNum === (month + 1) ? 'bg-blue-50/70 font-semibold' : ''}`}>
-                        <td className="p-2 text-center font-bold text-gray-800">Tháng {s.monthNum}</td>
-                        <td className="p-2 text-blue-600 font-bold">{s.coconuts > 0 ? `${s.coconuts.toLocaleString('vi-VN')} dừa` : '-'}</td>
-                        <td className="p-2 text-emerald-600 font-bold">{s.money > 0 ? `${s.money.toLocaleString('vi-VN')} VNĐ` : '-'}</td>
-                        <td className="p-2 text-center">
-                          <button 
-                            onClick={() => handleSelectMonthYear(s.monthNum, year)}
-                            className="text-blue-600 hover:underline text-[11px] font-medium"
-                          >
-                            Xem chi tiết
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
             </div>
 
