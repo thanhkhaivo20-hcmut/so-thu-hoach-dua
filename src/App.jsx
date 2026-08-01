@@ -128,7 +128,7 @@ const App = () => {
   const handleSaveRecord = async () => {
     if (role !== 'admin' || !selectedDateStr) return;
     const dateStr = selectedDateStr;
-    const googleSheetURL = "https://script.google.com/macros/s/AKfycbwLH_CsbIw-RBcEWuvR1jQ9itD3zdCtCe6HfDJlCYAzAIljTaTfBVDxvq-A9qakbw8Z/exec";
+    const googleSheetURL = "https://script.google.com/macros/s/AKfycbzzCOWffQcHetcWNzphmpCYOV9soG7MecjJbILclDk9POF6XBU25abuDJwW6W3xyUKk/exec";
 
     // NẾU XÓA TÊN KHÁCH HÀNG (ĐỒNG NGHĨA VỚI XÓA LỊCH SỬ NGÀY ĐÓ)
     if (!selectedCustomer || !selectedCustomer.trim()) {
