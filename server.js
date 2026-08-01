@@ -9,32 +9,41 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-// Port linh hoạt khi đưa lên mạng
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
 
-// CẤU HÌNH DATABASE DÀNH CHO GLITCH
-// Quan trọng: Trên Glitch phải lưu file db vào thư mục ẩn .data để không bị mất dữ liệu
+// 1. CẤU HÌNH DATABASE
 const dbDir = path.join(__dirname, '.data');
 if (!fs.existsSync(dbDir)){
     fs.mkdirSync(dbDir);
 }
-// Nhận diện xem đang chạy trên máy tính hay trên Glitch
+
 const isGlitch = process.env.PROJECT_DOMAIN; 
 const dbPath = isGlitch ? path.join(dbDir, 'dua_database.db') : './dua_database.db';
 
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) console.error('Lỗi kết nối database:', err.message);
-  else console.log('Đã kết nối cơ sở dữ liệu SQLite.');
+  else console.log('Đã kết nối cơ sở dữ liệu SQLite thành công.');
 });
 
-// Tạo bảng
-db.run(`CREATE TABLE IF NOT EXISTS harvest_data (date TEXT PRIMARY KEY, name TEXT, status TEXT, count INTEGER)`);
-db.run(`CREATE TABLE IF NOT EXISTS customers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, standard_count INTEGER, cycle_days INTEGER)`);
+// 2. TẠO CÁC BẢNG TRONG DATABASE
+db.serialize(() => {
+  db.run(`CREATE TABLE IF NOT EXISTS harvest_data (date TEXT PRIMARY KEY, name TEXT, status TEXT, count INTEGER)`);
+  
+  db.run(`CREATE TABLE IF NOT EXISTS customers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, 
+    name TEXT UNIQUE, 
+    standard_count INTEGER DEFAULT 120, 
+    cycle_days INTEGER DEFAULT 25,
+    price REAL DEFAULT 8000
+  )`);
 
-// ============ CÁC API TƯƠNG TÁC DỮ LIỆU ============
+  db.run(`ALTER TABLE customers ADD COLUMN price REAL DEFAULT 8000`, () => {});
+});
+
+// 3. CÁC API TRẢ VỀ DỮ LIỆU
 app.get('/api/records', (req, res) => {
   const monthPrefix = req.query.month; 
   db.all(`SELECT * FROM harvest_data WHERE date LIKE ?`, [`${monthPrefix}%`], (err, rows) => {
@@ -55,31 +64,36 @@ app.post('/api/records', (req, res) => {
 });
 
 app.get('/api/customers', (req, res) => {
-  db.all(`SELECT * FROM customers`, [], (err, rows) => {
+  db.all(`SELECT * FROM customers ORDER BY id DESC`, [], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
 });
 
 app.post('/api/customers', (req, res) => {
-  const { name, standard_count, cycle_days } = req.body;
-  db.run(`INSERT INTO customers (name, standard_count, cycle_days) VALUES (?, ?, ?)`, 
-    [name, standard_count, cycle_days], function(err) {
+  const { name, standard_count, cycle_days, price } = req.body;
+  db.run(`INSERT INTO customers (name, standard_count, cycle_days, price) VALUES (?, ?, ?, ?)`, 
+    [name, standard_count || 120, cycle_days || 25, price || 8000], function(err) {
       if (err) return res.status(500).json({ error: err.message });
-      res.json({ id: this.lastID, name, standard_count, cycle_days });
+      res.json({ id: this.lastID, name, standard_count, cycle_days, price: price || 8000 });
   });
 });
 
-// ============ PHẦN MỚI: TÍCH HỢP GIAO DIỆN VÀO BACKEND ============
-// Cho phép phục vụ các file giao diện tĩnh (css, js, hình ảnh) trong thư mục dist
+app.delete('/api/customers/:id', (req, res) => {
+  db.run(`DELETE FROM customers WHERE id = ?`, [req.params.id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ message: 'Đã xóa thành công' });
+  });
+});
+
+// 4. PHỤC VỤ FILE GIAO DIỆN REACT (Đã cập nhật để tương thích với mọi phiên bản Express)
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Bất kỳ đường dẫn nào người dùng gõ vào, sẽ trả về trang web React
-// Bất kỳ đường dẫn nào người dùng gõ vào, sẽ trả về trang web React
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
+// 5. KHỞI CHẠY SERVER
 app.listen(PORT, () => {
-  console.log(`Server Máy Chủ ĐÃ GỘP đang chạy tại: http://localhost:${PORT}`);
+  console.log(`🚀 Server đang chạy tại: http://localhost:${PORT}`);
 });
