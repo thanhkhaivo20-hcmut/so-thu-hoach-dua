@@ -13,8 +13,8 @@ const App = () => {
   const [selectedCustomer, setSelectedCustomer] = useState("");
   const [customers, setCustomers] = useState([]);
   
-  // Thêm đơn giá mặc định 8000 VNĐ vào form thêm khách hàng
   const [newCustomer, setNewCustomer] = useState({ name: "", standard_count: 120, cycle_days: 25, price: 8000 });
+  const [editingCustomer, setEditingCustomer] = useState(null); // Trạng thái chỉnh sửa khách hàng
 
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth(); 
@@ -91,6 +91,22 @@ const App = () => {
       setCustomers([...customers, data]);
       setNewCustomer({ name: "", standard_count: 120, cycle_days: 25, price: 8000 });
       if (!selectedCustomer) setSelectedCustomer(data.name);
+    });
+  };
+
+  const handleUpdateCustomer = () => {
+    if (role !== 'admin' || !editingCustomer) return;
+    if (!editingCustomer.name) return alert("Vui lòng nhập tên khách hàng!");
+
+    fetch(`/api/customers/${editingCustomer.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editingCustomer)
+    })
+    .then(res => res.json())
+    .then(() => {
+      fetchCustomers();
+      setEditingCustomer(null);
     });
   };
 
@@ -257,19 +273,57 @@ const App = () => {
                 {customers.map((c, index) => (
                   <tr key={index} className="border-b hover:bg-gray-50">
                     <td className="p-2 md:p-3 font-medium">{c.name}</td>
-                    <td className="p-2 md:p-3 text-red-600 font-bold">{Number(c.price || 8000).toLocaleString('vi-VN')} đ/trái</td>
+                    <td className="p-2 md:p-3 text-red-600 font-bold">{Number(c.price || 8000).toLocaleString('vi-VN')} đ</td>
                     <td className="p-2 md:p-3">{c.standard_count}</td>
                     <td className="p-2 md:p-3">{c.cycle_days} ngày</td>
                     <td className="p-2 md:p-3 text-center">
-                      <button onClick={() => handleDeleteCustomer(c.id, c.name)} className="text-red-600 hover:bg-red-50 border border-red-200 px-2 py-1 rounded text-xs">
-                        🗑️ Xóa
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button onClick={() => setEditingCustomer(c)} className="text-blue-600 hover:bg-blue-50 border border-blue-200 px-2 py-1 rounded text-xs flex items-center gap-1">
+                          ✏️ Sửa
+                        </button>
+                        <button onClick={() => handleDeleteCustomer(c.id, c.name)} className="text-red-600 hover:bg-red-50 border border-red-200 px-2 py-1 rounded text-xs flex items-center gap-1">
+                          🗑️ Xóa
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {/* Modal chỉnh sửa khách hàng */}
+          {editingCustomer && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+                <h3 className="text-lg font-bold mb-4">Chỉnh sửa thông tin khách hàng</h3>
+                <div className="space-y-3 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Tên khách hàng:</label>
+                    <input type="text" className="w-full border rounded p-2" value={editingCustomer.name} onChange={e => setEditingCustomer({...editingCustomer, name: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Đơn giá (VNĐ):</label>
+                    <input type="number" className="w-full border rounded p-2" value={editingCustomer.price} onChange={e => setEditingCustomer({...editingCustomer, price: Number(e.target.value)})} />
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="w-1/2">
+                      <label className="block text-sm font-medium mb-1">Chuẩn (trái):</label>
+                      <input type="number" className="w-full border rounded p-2" value={editingCustomer.standard_count} onChange={e => setEditingCustomer({...editingCustomer, standard_count: Number(e.target.value)})} />
+                    </div>
+                    <div className="w-1/2">
+                      <label className="block text-sm font-medium mb-1">Chu kỳ (ngày):</label>
+                      <input type="number" className="w-full border rounded p-2" value={editingCustomer.cycle_days} onChange={e => setEditingCustomer({...editingCustomer, cycle_days: Number(e.target.value)})} />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex justify-end space-x-3">
+                  <button onClick={() => setEditingCustomer(null)} className="px-4 py-2 text-gray-600 border rounded">Hủy</button>
+                  <button onClick={handleUpdateCustomer} className="px-4 py-2 bg-blue-600 text-white rounded">Lưu thay đổi</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

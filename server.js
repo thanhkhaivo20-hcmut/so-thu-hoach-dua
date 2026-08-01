@@ -79,6 +79,16 @@ app.post('/api/customers', (req, res) => {
   });
 });
 
+// API Chỉnh sửa khách hàng
+app.put('/api/customers/:id', (req, res) => {
+  const { name, standard_count, cycle_days, price } = req.body;
+  db.run(`UPDATE customers SET name = ?, standard_count = ?, cycle_days = ?, price = ? WHERE id = ?`,
+    [name, standard_count, cycle_days, price, req.params.id], function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: 'Cập nhật thành công!' });
+  });
+});
+
 app.delete('/api/customers/:id', (req, res) => {
   db.run(`DELETE FROM customers WHERE id = ?`, [req.params.id], function(err) {
     if (err) return res.status(500).json({ error: err.message });
@@ -86,7 +96,7 @@ app.delete('/api/customers/:id', (req, res) => {
   });
 });
 
-// 4. PHỤC VỤ FILE GIAO DIỆN REACT (Đã cập nhật để tương thích với mọi phiên bản Express)
+// 4. PHỤC VỤ FILE GIAO DIỆN REACT
 app.use(express.static(path.join(__dirname, 'dist')));
 
 app.use((req, res) => {
