@@ -155,11 +155,21 @@ const App = () => {
     };
 
     try {
+      // 1. Lưu vào Firebase
       await set(ref(db, `records/${dateStr}`), newData);
       const targetCust = customers.find(c => c.name === selectedCustomer.trim());
       if (targetCust) {
         await set(ref(db, `customers/${targetCust.id}`), { ...targetCust, price: priceNum });
       }
+      // 2. BẮN DỮ LIỆU SANG GOOGLE SHEET (Đoạn mới thêm)
+      const googleSheetURL = "https://script.google.com/macros/s/AKfycbxoMWEiRAza1Br3JdKCxIhrcPQTxmNQp7TlWWKE5l7Jz6KysLpOV9-oCtwT3yR1wqCE/exec"; 
+      
+      fetch(googleSheetURL, {
+        method: "POST",
+        body: JSON.stringify(newData),
+        // Chú ý: Dùng text/plain để không bị Google chặn lỗi CORS
+        headers: { "Content-Type": "text/plain;charset=utf-8" }
+      }).catch(err => console.log("Lỗi đồng bộ Sheet: ", err));
     } catch (err) {
       alert("⚠️ Không thể kết nối tới máy chủ Google!");
     }
