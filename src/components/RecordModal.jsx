@@ -114,9 +114,41 @@ const RecordModal = ({
           <input type="text" className="w-full border rounded p-2 text-lg font-bold" placeholder="VD: 6.5" value={harvestCount} onChange={(e) => setHarvestCount(e.target.value)} />
         </div>
 
-        <div className="flex justify-end space-x-3">
-          <button onClick={() => { setSelectedDateStr(null); setIsDropdownOpen(false); }} className="px-4 py-2 text-gray-600 border rounded">Hủy</button>
-          <button onClick={handleSaveRecord} className="px-4 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700">Lưu lại</button>
+        {/* PHẦN FOOTER ĐƯỢC CHỈNH SỬA */}
+        <div className="flex justify-between items-center mt-5 pt-4 border-t border-gray-100">
+          {/* Nút Thêm khách ở góc trái */}
+          <button
+            type="button"
+            onClick={() => {
+              // Tại đây, bạn có thể gọi handleSaveRecord và viết thêm logic 
+              // ở component cha (App.jsx) để không đóng Modal sau khi lưu, 
+              // sau đó reset lại state của input.
+              handleSaveRecord(); 
+            }}
+            className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-200"
+            title="Lưu khách này và tiếp tục thêm khách khác cho cùng ngày"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Thêm khách
+          </button>
+
+          {/* Cụm nút Hủy và Lưu lại ở góc phải */}
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => { setSelectedDateStr(null); setIsDropdownOpen(false); }} 
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-200"
+            >
+              Hủy
+            </button>
+            <button 
+              onClick={handleSaveRecord} 
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              Lưu lại
+            </button>
+          </div>
         </div>
       </div>
     </div>

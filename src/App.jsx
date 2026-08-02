@@ -128,12 +128,12 @@ const App = () => {
   const handleSaveRecord = async () => {
     if (role !== 'admin' || !selectedDateStr) return;
     const dateStr = selectedDateStr;
-    const googleSheetURL = "https://script.google.com/macros/s/AKfycbzzCOWffQcHetcWNzphmpCYOV9soG7MecjJbILclDk9POF6XBU25abuDJwW6W3xyUKk/exec";
+    const googleSheetURL = "https://script.google.com/macros/s/AKfycbz4a_-GBcFvRXfwRsj-atkvPKiHfR00trrO9Kcb5HZrHETgtL0XVIoETidWuCI9VPH6/exec";
 
     // NẾU XÓA TÊN KHÁCH HÀNG (ĐỒNG NGHĨA VỚI XÓA LỊCH SỬ NGÀY ĐÓ)
     if (!selectedCustomer || !selectedCustomer.trim()) {
       // 1. Xóa trên Firebase
-      await remove(ref(db, `records/${dateStr}`));
+      await remove(ref(db, `records/${dateStr}/${tên_khách_hàng}`));
 
       // 2. Bắn lệnh XÓA sang Google Sheet
       fetch(googleSheetURL, {
@@ -169,7 +169,7 @@ const App = () => {
 
     try {
       // 1. Lưu trên Firebase
-      await set(ref(db, `records/${dateStr}`), {
+      await set(ref(db, `records/${dateStr}/${tên_khách_hàng}`), {
         date: newData.date,
         name: newData.name,
         status: newData.status,
