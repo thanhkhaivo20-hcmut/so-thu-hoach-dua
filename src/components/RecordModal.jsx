@@ -55,6 +55,8 @@ const RecordModal = ({
                     e.stopPropagation();
                     setCustomerSearch('');
                     setSelectedCustomer('');
+                    setUnitPrice(''); // Tự động xóa đơn giá
+                    setHarvestCount(''); // Tự động xóa số dừa
                     setIsDropdownOpen(true);
                   }}
                   className="hover:text-red-600 font-bold px-1 text-sm"
@@ -74,7 +76,13 @@ const RecordModal = ({
               <div className="absolute z-20 w-full bg-white border border-gray-300 rounded-b shadow-lg max-h-52 overflow-y-auto mt-1 left-0">
                 <div 
                   className="p-2.5 hover:bg-gray-100 cursor-pointer text-sm italic text-gray-500 border-b border-gray-100"
-                  onClick={() => { setSelectedCustomer(""); setCustomerSearch(""); setIsDropdownOpen(false); }}
+                  onClick={() => { 
+                    setSelectedCustomer(""); 
+                    setCustomerSearch(""); 
+                    setUnitPrice(""); // Tự động xóa đơn giá
+                    setHarvestCount(""); // Tự động xóa số dừa
+                    setIsDropdownOpen(false); 
+                  }}
                 >
                   -- Bỏ chọn (Chuyển về Chưa ghi) --
                 </div>
@@ -114,17 +122,10 @@ const RecordModal = ({
           <input type="text" className="w-full border rounded p-2 text-lg font-bold" placeholder="VD: 6.5" value={harvestCount} onChange={(e) => setHarvestCount(e.target.value)} />
         </div>
 
-        {/* PHẦN FOOTER ĐƯỢC CHỈNH SỬA */}
         <div className="flex justify-between items-center mt-5 pt-4 border-t border-gray-100">
-          {/* Nút Thêm khách ở góc trái */}
           <button
             type="button"
-            onClick={() => {
-              // Tại đây, bạn có thể gọi handleSaveRecord và viết thêm logic 
-              // ở component cha (App.jsx) để không đóng Modal sau khi lưu, 
-              // sau đó reset lại state của input.
-              handleSaveRecord(); 
-            }}
+            onClick={() => handleSaveRecord(true)}
             className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-200"
             title="Lưu khách này và tiếp tục thêm khách khác cho cùng ngày"
           >
@@ -134,7 +135,6 @@ const RecordModal = ({
             Thêm khách
           </button>
 
-          {/* Cụm nút Hủy và Lưu lại ở góc phải */}
           <div className="flex items-center gap-2">
             <button 
               onClick={() => { setSelectedDateStr(null); setIsDropdownOpen(false); }} 
@@ -143,7 +143,7 @@ const RecordModal = ({
               Hủy
             </button>
             <button 
-              onClick={handleSaveRecord} 
+              onClick={() => handleSaveRecord()} 
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               Lưu lại

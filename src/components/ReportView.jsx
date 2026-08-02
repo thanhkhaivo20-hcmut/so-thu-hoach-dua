@@ -136,10 +136,11 @@ const ReportView = ({
                     className={`flex-1 flex flex-col items-center h-full justify-end group cursor-pointer px-1 rounded transition-all relative ${isSelectedMonth ? 'bg-blue-100/50 ring-2 ring-blue-400' : 'hover:bg-gray-100'}`}
                   >
                     <div className="w-full flex items-end justify-center gap-1 h-full relative">
+                      {/* CỘT DỪA - Đã chỉnh sửa hiển thị icon và số làm tròn */}
                       <div className="flex flex-col items-center flex-1 max-w-[22px] h-full justify-end">
                         {stat.coconuts > 0 && (
-                          <span className="text-[9px] font-extrabold text-blue-700 mb-0.5 whitespace-nowrap">
-                            {formatShortCount(stat.coconuts)}
+                          <span className="text-[10px] font-extrabold text-blue-700 mb-0.5 whitespace-nowrap">
+                            {Number(stat.coconuts.toFixed(2)).toLocaleString('vi-VN')}🥥
                           </span>
                         )}
                         <div 
@@ -148,10 +149,11 @@ const ReportView = ({
                         ></div>
                       </div>
 
+                      {/* CỘT TIỀN - Đã chỉnh sửa chia 1000 và thêm chữ k */}
                       <div className="flex flex-col items-center flex-1 max-w-[22px] h-full justify-end">
                         {stat.money > 0 && (
-                          <span className="text-[9px] font-extrabold text-emerald-700 mb-0.5 whitespace-nowrap">
-                            {formatShortMoney(stat.money)}
+                          <span className="text-[10px] font-extrabold text-emerald-700 mb-0.5 whitespace-nowrap">
+                            {(stat.money / 1000).toLocaleString('vi-VN')}k
                           </span>
                         )}
                         <div 

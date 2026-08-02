@@ -25,6 +25,8 @@ const App = () => {
   const [customerSearch, setCustomerSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [unitPrice, setUnitPrice] = useState("");
+  
+  const [editingOriginalCustomer, setEditingOriginalCustomer] = useState(null);
 
   const [newCustomer, setNewCustomer] = useState({ name: "", cycle_days: 25, price: 60000 });
   const [editingCustomer, setEditingCustomer] = useState(null);
@@ -33,18 +35,15 @@ const App = () => {
   const month = currentMonth.getMonth();
   const currentMonthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
 
-  // TỰ ĐỘNG ĐỒNG BỘ THỜI GIAN THỰC TỪ GOOGLE FIREBASE
   useEffect(() => {
     if (!role) return;
 
-    // Tải & Lắng nghe dữ liệu Lịch sử ghi nhận
     const recordsRef = ref(db, 'records');
     const unsubRecords = onValue(recordsRef, (snapshot) => {
       const data = snapshot.val();
       setRecords(data || {});
     });
 
-    // Tải & Lắng nghe dữ liệu Khách hàng
     const customersRef = ref(db, 'customers');
     const unsubCustomers = onValue(customersRef, (snapshot) => {
       const data = snapshot.val();
@@ -52,7 +51,6 @@ const App = () => {
         const custList = Object.keys(data).map(key => ({ id: key, ...data[key] }));
         setCustomers(custList);
       } else {
-        // Mặc định nếu chưa có khách hàng nào
         const defaultCustomers = [
           { id: "1", name: "Nguyễn Văn A", price: 60000, cycle_days: 25 },
           { id: "2", name: "Huỳnh Thị Kim Liên", price: 60000, cycle_days: 25 },
@@ -77,12 +75,10 @@ const App = () => {
     }
   }, [role]);
 
-  // ĐIỀU HƯỚNG THÁNG
   const handlePrevMonth = () => setCurrentMonth(new Date(year, month - 1, 1));
   const handleNextMonth = () => setCurrentMonth(new Date(year, month + 1, 1));
   const handleSelectMonthYear = (newM, newY) => setCurrentMonth(new Date(newY, newM - 1, 1));
 
-  // ĐĂNG NHẬP / ĐĂNG XUẤT
   const handleLogin = () => {
     if (pinCode === '1234') { 
       setRole('admin'); 
@@ -106,51 +102,79 @@ const App = () => {
     return parseFloat(val.toString().replace(',', '.')) || 0;
   };
 
-  const handleOpenModal = (dateStr) => {
+  const handleOpenModal = (dateStr, customerName = null) => {
     if (role !== 'admin') return;
     setSelectedDateStr(dateStr);
     setIsDropdownOpen(false);
-    const rec = records[dateStr];
-    if (rec && rec.status === 'recorded') {
-      setHarvestCount(rec.count ? rec.count.toString() : "");
-      setSelectedCustomer(rec.name || "");
-      setCustomerSearch(rec.name || "");
-      setUnitPrice(rec.price || (customers.find(c => c.name === rec.name)?.price) || 60000);
-    } else {
-      setHarvestCount("");
-      setSelectedCustomer("");
-      setCustomerSearch("");
-      setUnitPrice(60000);
+    
+    const dayData = records[dateStr];
+    
+    if (dayData) {
+      const isFlat = dayData.status === 'recorded'; // Cấu trúc cũ
+      let targetRecord = null;
+      
+      if (customerName) {
+         targetRecord = isFlat ? dayData : dayData[customerName];
+      } else if (isFlat) {
+         targetRecord = dayData;
+      }
+      
+      if (targetRecord && targetRecord.status === 'recorded') {
+        setHarvestCount(targetRecord.count ? targetRecord.count.toString() : "");
+        setSelectedCustomer(targetRecord.name || "");
+        setCustomerSearch(targetRecord.name || "");
+        setUnitPrice(targetRecord.price || (customers.find(c => c.name === targetRecord.name)?.price) || 60000);
+        setEditingOriginalCustomer(targetRecord.name); 
+        return;
+      }
     }
+    
+    setHarvestCount("");
+    setSelectedCustomer("");
+    setCustomerSearch("");
+    setUnitPrice(60000);
+    setEditingOriginalCustomer(null);
   };
 
-  // LƯU / XÓA GHI NHẬN TRÊN ĐÁM MÂY & GOOGLE SHEET
-  const handleSaveRecord = async () => {
+  // Hàm xử lý lưu đã được nâng cấp mạnh mẽ để dọn dẹp cấu trúc cũ
+  const handleSaveRecord = async (keepModalOpen = false) => {
     if (role !== 'admin' || !selectedDateStr) return;
     const dateStr = selectedDateStr;
     const googleSheetURL = "https://script.google.com/macros/s/AKfycbz4a_-GBcFvRXfwRsj-atkvPKiHfR00trrO9Kcb5HZrHETgtL0XVIoETidWuCI9VPH6/exec";
+    
+    const safeCustomer = selectedCustomer ? selectedCustomer.trim() : "";
 
-    // NẾU XÓA TÊN KHÁCH HÀNG (ĐỒNG NGHĨA VỚI XÓA LỊCH SỬ NGÀY ĐÓ)
-    if (!selectedCustomer || !selectedCustomer.trim()) {
-      // 1. Xóa trên Firebase
-      await remove(ref(db, `records/${dateStr}/${tên_khách_hàng}`));
+    // Phân tích xem ngày này đang dùng cấu trúc cũ hay mới
+    const dayData = records[dateStr];
+    const isFlat = dayData && dayData.status === 'recorded';
 
-      // 2. Bắn lệnh XÓA sang Google Sheet
-      fetch(googleSheetURL, {
-        method: "POST",
-        body: JSON.stringify({ action: "delete", date: dateStr }),
-        headers: { "Content-Type": "text/plain;charset=utf-8" }
-      }).catch(err => console.log("Lỗi xóa trên Sheet: ", err));
+    // XỬ LÝ XÓA KHÁCH HÀNG
+    if (!safeCustomer) {
+      if (editingOriginalCustomer) {
+        if (isFlat) {
+          // Xóa triệt để nếu là cấu trúc cũ
+          await remove(ref(db, `records/${dateStr}`));
+        } else {
+          // Xóa nhánh khách hàng nếu là cấu trúc mới
+          await remove(ref(db, `records/${dateStr}/${editingOriginalCustomer}`));
+        }
 
-      setSelectedDateStr(null);
+        fetch(googleSheetURL, {
+          method: "POST",
+          body: JSON.stringify({ action: "delete", date: dateStr, name: editingOriginalCustomer }),
+          headers: { "Content-Type": "text/plain;charset=utf-8" }
+        }).catch(err => console.log("Lỗi xóa trên Sheet: ", err));
+      }
+      
+      if (keepModalOpen !== true) setSelectedDateStr(null);
       setHarvestCount("");
       setSelectedCustomer("");
       setCustomerSearch("");
       setUnitPrice("");
+      setEditingOriginalCustomer(null);
       return;
     }
 
-    // NẾU THÊM MỚI HOẶC SỬA SỐ LIỆU
     const countNum = parseCoconutCount(harvestCount);
     if (countNum <= 0) {
       alert("⚠️ Vui lòng nhập số dừa hợp lệ (lớn hơn 0)!");
@@ -161,15 +185,23 @@ const App = () => {
     const newData = { 
       action: "save",
       date: dateStr, 
-      name: selectedCustomer.trim(), 
+      name: safeCustomer, 
       status: "recorded", 
       count: countNum,
       price: priceNum 
     };
 
     try {
-      // 1. Lưu trên Firebase
-      await set(ref(db, `records/${dateStr}/${tên_khách_hàng}`), {
+      if (isFlat) {
+         // Nếu đang là cấu trúc cũ, phải xóa toàn bộ gốc ngày đó đi trước để chuyển sang cấu trúc nhiều lớp
+         await remove(ref(db, `records/${dateStr}`));
+      } else if (editingOriginalCustomer && editingOriginalCustomer !== safeCustomer) {
+         // Đổi tên khách hàng: Xóa nhánh cũ ở cấu trúc mới
+         await remove(ref(db, `records/${dateStr}/${editingOriginalCustomer}`));
+      }
+
+      // Lưu đúp nhánh mới (hỗ trợ lưu nhiều khách)
+      await set(ref(db, `records/${dateStr}/${safeCustomer}`), {
         date: newData.date,
         name: newData.name,
         status: newData.status,
@@ -177,12 +209,11 @@ const App = () => {
         price: newData.price
       });
       
-      const targetCust = customers.find(c => c.name === selectedCustomer.trim());
+      const targetCust = customers.find(c => c.name === safeCustomer);
       if (targetCust) {
         await set(ref(db, `customers/${targetCust.id}`), { ...targetCust, price: priceNum });
       }
 
-      // 2. Bắn dữ liệu CẬP NHẬT/THÊM MỚI sang Google Sheet
       fetch(googleSheetURL, {
         method: "POST",
         body: JSON.stringify(newData),
@@ -190,17 +221,20 @@ const App = () => {
       }).catch(err => console.log("Lỗi đồng bộ Sheet: ", err));
 
     } catch (err) {
-      alert("⚠️ Không thể kết nối tới máy chủ Google!");
+      console.error(err);
+      alert("⚠️ Không thể kết nối tới máy chủ Google hoặc Firebase!");
     }
 
-    setSelectedDateStr(null);
+    if (keepModalOpen !== true) {
+      setSelectedDateStr(null);
+    }
     setHarvestCount("");
     setSelectedCustomer("");
     setCustomerSearch("");
     setUnitPrice("");
+    setEditingOriginalCustomer(null);
   };
 
-  // QUẢN LÝ KHÁCH HÀNG TRÊN ĐÁM MÂY
   const handleAddCustomer = async () => {
     if (role !== 'admin') return;
     if (!newCustomer.name) return alert("Vui lòng nhập tên khách hàng!");
@@ -227,7 +261,6 @@ const App = () => {
     }
   };
 
-  // TÍNH BÁO CÁO
   const calculateReport = () => {
     let totalCoconuts = 0;
     let totalMoney = 0;
@@ -236,8 +269,17 @@ const App = () => {
     
     sortedDates.forEach(dateStr => {
       if (dateStr.startsWith(currentMonthStr)) {
-        const rec = records[dateStr];
-        if (rec && rec.status === 'recorded') {
+        const dayData = records[dateStr];
+        if (!dayData) return;
+        
+        let dayRecords = [];
+        if (dayData.status === 'recorded') {
+          dayRecords = [dayData];
+        } else {
+          dayRecords = Object.values(dayData).filter(r => r && r.status === 'recorded');
+        }
+
+        dayRecords.forEach(rec => {
           const count = parseFloat(rec.count) || 0;
           const price = parseFloat(rec.price) || (customers.find(c => c.name === rec.name)?.price) || 60000;
           const total = count * price;
@@ -253,7 +295,7 @@ const App = () => {
             lunarDay: lunar.day, lunarMonth: lunar.month,
             name: rec.name, count, price, total
           });
-        }
+        });
       }
     });
     return { totalCoconuts, totalMoney, harvestList };
@@ -261,16 +303,27 @@ const App = () => {
 
   const calculateYearlyAnalysis = () => {
     const monthlyStats = Array.from({ length: 12 }, (_, i) => ({ monthNum: i + 1, coconuts: 0, money: 0 }));
+    
     Object.keys(records).forEach(dateStr => {
       if (dateStr.startsWith(`${year}-`)) {
         const parts = dateStr.split('-');
         const mIndex = parseInt(parts[1], 10) - 1;
-        const rec = records[dateStr];
-        if (rec && rec.status === 'recorded' && mIndex >= 0 && mIndex < 12) {
-          const count = parseFloat(rec.count) || 0;
-          const price = parseFloat(rec.price) || (customers.find(c => c.name === rec.name)?.price) || 60000;
-          monthlyStats[mIndex].coconuts += count;
-          monthlyStats[mIndex].money += count * price;
+        const dayData = records[dateStr];
+        
+        if (dayData && mIndex >= 0 && mIndex < 12) {
+          let dayRecords = [];
+          if (dayData.status === 'recorded') {
+            dayRecords = [dayData];
+          } else {
+            dayRecords = Object.values(dayData).filter(r => r && r.status === 'recorded');
+          }
+
+          dayRecords.forEach(rec => {
+            const count = parseFloat(rec.count) || 0;
+            const price = parseFloat(rec.price) || (customers.find(c => c.name === rec.name)?.price) || 60000;
+            monthlyStats[mIndex].coconuts += count;
+            monthlyStats[mIndex].money += count * price;
+          });
         }
       }
     });
